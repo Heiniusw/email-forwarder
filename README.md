@@ -25,3 +25,7 @@
   }
 ]
 ```
+
+imap_server: Where emails are fetched from.
+smtp_server: Where emails are sent to.
+accounts: Accounts to fetch and send.
