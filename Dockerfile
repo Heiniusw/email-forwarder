@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y cron
 
 WORKDIR /app
 
-RUN crontab ./crontab
+RUN crontab crontab
 
 COPY . .
 
