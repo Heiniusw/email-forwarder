@@ -91,6 +91,7 @@ def main():
     
     print("Starting email-forwarder...")
     process_accounts(config)
+    print("Exiting email-forwarder...")
 
 if __name__ == '__main__':
     main()
