@@ -5,4 +5,4 @@ services:
     container_name: email-forwarder
     volumes:
       - ./config.json:/app/config.json:ro
-    restart: always
+    restart: never
