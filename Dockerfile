@@ -1,8 +1,10 @@
 FROM python
 
+RUN apt-get update && apt-get install -y cron
+
 WORKDIR /app
 
-RUN crontab /app/crontab
+RUN crontab crontab
 
 COPY . .
 
