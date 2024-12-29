@@ -30,35 +30,19 @@ def fetch_emails(imap_config, account):
                 if isinstance(response_part, tuple):
                     raw_email = response_part[1]
                     msg = email.message_from_bytes(raw_email)
-                    emails.append(msg)
+                    emails.append((email_id, msg))
 
-        imap.logout()
-        print(f"Fetched {len(emails)} emails for {account['email']}.")
-        return emails
+        return imap, emails
 
 
-def forward_email(smtp_config, original_email, recipient_email):
+def forward_email(smtp_config, raw_email, recipient_email):
     """Forward an email using the SMTP server."""
     print(f"Forwarding email to {recipient_email} via {smtp_config['host']}")
 
-    # Create a new MIME email message
-    forwarded = MIMEMultipart()
-    forwarded['From'] = smtp_config['username']
-    forwarded['To'] = recipient_email
-    forwarded['Subject'] = "FWD: " + original_email['Subject']
-
-    # Include the original email content
-    if original_email.is_multipart():
-        for part in original_email.get_payload():
-            forwarded.attach(part)
-    else:
-        forwarded.attach(MIMEText(original_email.get_payload(), "plain"))
-
-    # Send the email
     with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as smtp:
         smtp.starttls()
         smtp.login(smtp_config['username'], smtp_config['password'])
-        smtp.sendmail(smtp_config['username'], recipient_email, forwarded.as_string())
+        smtp.sendmail(smtp_config['username'], recipient_email, raw_email.as_bytes())
         print(f"Email forwarded to {recipient_email}")
 
 
@@ -69,10 +53,22 @@ def process_accounts(config):
         smtp_config = server_config["smtp_server"]
 
         for account in server_config["accounts"]:
-            emails = fetch_emails(imap_config, account)
+            imap, emails = fetch_emails(imap_config, account)
 
-            for email_msg in emails:
-                forward_email(smtp_config, email_msg, account["email"])
+            for email_id, email_msg in emails:
+                try:
+                    # Forward the email
+                    forward_email(smtp_config, email_msg, account["email"])
+
+                    # Mark email for deletion after successful forwarding
+                    imap.store(email_id, '+FLAGS', '\\Deleted')
+                except Exception as e:
+                    print(f"Error forwarding email {email_id} for {account['email']}: {e}")
+
+            # Permanently delete emails marked as deleted
+            imap.expunge()
+            imap.logout()
+            print(f"Processed and cleaned up emails for {account['email']}.")
 
 
 if __name__ == "__main__":
