@@ -1,101 +1,97 @@
 import imaplib
 import smtplib
-import email
-import json
-import os
+from email import message_from_bytes
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import json
 
-CONFIG_PATH = "/app/config.json"  # Adjust path as needed
-
-def load_config(config_path):
-    """Load configuration from JSON file"""
-    print(f"Loading configuration from {config_path}")
-    with open(config_path, 'r') as config_file:
+# Load the configuration
+def load_config(path):
+    with open(path, 'r') as config_file:
         return json.load(config_file)
 
-def forward_email(smtp_server, smtp_port, smtp_user, smtp_password, from_addr, to_addr, subject, body):
-    """Forward an email to the specified SMTP server"""
+# Fetch emails from IMAP
+def fetch_emails(imap_config):
     try:
-        print(f"Forwarding email from {from_addr} to {to_addr}")
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            if smtp_user and smtp_password:
-                server.starttls()  # Secure the connection
-                server.login(smtp_user, smtp_password)  # Log in to the SMTP server
-            msg = MIMEMultipart()
-            msg['From'] = from_addr
-            msg['To'] = to_addr
-            msg['Subject'] = subject
-            msg.attach(MIMEText(body, 'plain'))
-            server.sendmail(from_addr, to_addr, msg.as_string())
-            print(f"Email forwarded successfully from {from_addr} to {to_addr}")
+        print(f"Connecting to IMAP server: {imap_config['host']}")
+        mail = imaplib.IMAP4_SSL(imap_config['host'], imap_config['port'])
+        mail.login(imap_config['email'], imap_config['password'])
+        mail.select("inbox")  # Connect to inbox
+
+        # Search for all messages
+        _, data = mail.search(None, 'ALL')
+
+        emails = []
+        for num in data[0].split():
+            _, data = mail.fetch(num, '(RFC822)')
+            raw_email = data[0][1]
+            msg = message_from_bytes(raw_email)
+            emails.append(msg)
+        
+        return emails
+
     except Exception as e:
-        print(f"Failed to forward email from {from_addr} to {to_addr}: {e}")
+        print(f"Error fetching emails: {e}")
+        return []
+
+# Send the email via SMTP
+def send_email(smtp_config, msg):
+    try:
+        print(f"Forwarding email from {msg['From']} to {msg['To']}")
+        
+        # Connect to SMTP server
+        with smtplib.SMTP_SSL(smtp_config['host'], smtp_config['port']) as server:
+            if smtp_config.get('username') and smtp_config.get('password'):
+                server.login(smtp_config['username'], smtp_config['password'])
+            
+            # Forward the email
+            server.sendmail(msg['From'], msg['To'], msg.as_string())
+            print(f"Email from {msg['From']} forwarded successfully.")
+
+    except Exception as e:
+        print(f"Error sending email: {e}")
+
+# Expunge the email from IMAP after forwarding
+def expunge_email(mail, email_id):
+    try:
+        mail.store(email_id, '+FLAGS', '\\Deleted')
+        mail.expunge()  # Permanently delete
+        print(f"Deleted email with ID {email_id}")
+    except Exception as e:
+        print(f"Error deleting email: {e}")
 
 def process_accounts(config):
-    """Process each account, fetch emails and forward them"""
-    for account in config["accounts"]:
-        print(f"Connecting to IMAP server: {config['imap_server']['host']} for {account['email']}")
-        try:
-            with imaplib.IMAP4_SSL(config['imap_server']['host'], config['imap_server']['port']) as imap:
-                print(f"Logging in as {account['email']}")
-                imap.login(account['email'], account['imap_password'])
-                
-                # Select the mailbox to operate on
-                print("Selecting INBOX...")
-                imap.select('INBOX')
+    for account in config['accounts']:
+        imap_config = config['imap_server']
+        smtp_config = config['smtp_server']
+        imap_config['email'] = account['email']
+        imap_config['password'] = account['imap_password']
 
-                # Search for all emails in the INBOX
-                print("Searching for all messages...")
-                status, messages = imap.search(None, 'ALL')
-                if status != 'OK':
-                    print(f"Failed to search inbox for {account['email']}")
-                    continue
+        # Fetch emails from IMAP
+        emails = fetch_emails(imap_config)
+        if not emails:
+            print("No emails found.")
+            continue
 
-                # Process each message
-                for num in messages[0].split():
-                    print(f"Fetching email {num}...")
-                    status, data = imap.fetch(num, '(RFC822)')
-                    if status != 'OK':
-                        print(f"Failed to fetch email {num}")
-                        continue
-                    
-                    msg = email.message_from_bytes(data[0][1])
-                    from_addr = msg['From']
-                    subject = msg['Subject']
-                    body = ""
-                    
-                    # Check if the email is multipart
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode()
-                    else:
-                        body = msg.get_payload(decode=True).decode()
+        # Process and forward emails
+        with imaplib.IMAP4_SSL(imap_config['host'], imap_config['port']) as mail:
+            mail.login(imap_config['email'], imap_config['password'])
+            mail.select("inbox")
 
-                    # Forward the email
-                    forward_email(
-                        config['smtp_server']['host'],
-                        config['smtp_server']['port'],
-                        config['smtp_server'].get('username'),
-                        config['smtp_server'].get('password'),
-                        from_addr,
-                        account['email'],
-                        subject,
-                        body
-                    )
+            for msg in emails:
+                send_email(smtp_config, msg)
 
-                # Expunge deleted messages (ensure we are in the SELECTED state)
-                print("Expunging deleted messages...")
-                imap.expunge()
+                # Expunge the email after sending
+                email_id = msg['Message-ID']  # Use the Message-ID or other unique ID
+                expunge_email(mail, email_id)
 
-                # Logout from the IMAP session
-                print(f"Logging out of {account['email']}...")
-                imap.logout()
-        except Exception as e:
-            print(f"Error processing account {account['email']}: {e}")
-
-if __name__ == "__main__":
+def main():
+    config_path = '/app/config.json'  # Path to your config file
+    config = load_config(config_path)
+    
     print("Starting email-forwarder...")
-    config = load_config(CONFIG_PATH)
     process_accounts(config)
+    print("email-forwarder Finished...")
+
+if __name__ == '__main__':
+    main()
