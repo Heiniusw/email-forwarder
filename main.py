@@ -26,13 +26,13 @@ def fetch_emails(imap_config):
             _, data = mail.fetch(num, '(RFC822)')
             raw_email = data[0][1]
             msg = message_from_bytes(raw_email)
-            emails.append(msg)
+            emails.append((num, msg))  # Store both email ID and message
         
-        return emails
+        return emails, mail
 
     except Exception as e:
         print(f"Error fetching emails: {e}")
-        return []
+        return [], None
 
 # Send the email via SMTP
 def send_email(smtp_config, msg):
@@ -54,6 +54,7 @@ def send_email(smtp_config, msg):
 # Expunge the email from IMAP after forwarding
 def expunge_email(mail, email_id):
     try:
+        # Mark the email for deletion using its ID
         mail.store(email_id, '+FLAGS', '\\Deleted')
         mail.expunge()  # Permanently delete
         print(f"Deleted email with ID {email_id}")
@@ -68,22 +69,21 @@ def process_accounts(config):
         imap_config['password'] = account['imap_password']
 
         # Fetch emails from IMAP
-        emails = fetch_emails(imap_config)
+        emails, mail = fetch_emails(imap_config)
         if not emails:
             print("No emails found.")
             continue
 
         # Process and forward emails
-        with imaplib.IMAP4_SSL(imap_config['host'], imap_config['port']) as mail:
-            mail.login(imap_config['email'], imap_config['password'])
-            mail.select("inbox")
+        for email_id, msg in emails:
+            send_email(smtp_config, msg)
 
-            for msg in emails:
-                send_email(smtp_config, msg)
+            # Expunge the email after sending
+            expunge_email(mail, email_id)
 
-                # Expunge the email after sending
-                email_id = msg['Message-ID']  # Use the Message-ID or other unique ID
-                expunge_email(mail, email_id)
+        # Close the IMAP connection
+        mail.close()
+        mail.logout()
 
 def main():
     config_path = '/app/config.json'  # Path to your config file
@@ -91,7 +91,6 @@ def main():
     
     print("Starting email-forwarder...")
     process_accounts(config)
-    print("email-forwarder Finished...")
 
 if __name__ == '__main__':
     main()
