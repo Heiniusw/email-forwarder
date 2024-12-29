@@ -1,8 +1,6 @@
 import imaplib
 import smtplib
 import email
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import json
 
 
@@ -37,13 +35,19 @@ def fetch_emails(imap_config, account):
 
 def forward_email(smtp_config, raw_email, recipient_email):
     """Forward an email using the SMTP server."""
-    print(f"Forwarding email to {recipient_email} via {smtp_config['host']}")
+    original_sender = raw_email['From']  # Extract the original sender's email address
+    print(f"Forwarding email from {original_sender} to {recipient_email} via {smtp_config['host']}")
 
     with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as smtp:
         smtp.starttls()
-        smtp.login(smtp_config['username'], smtp_config['password'])
-        smtp.sendmail(smtp_config['username'], recipient_email, raw_email.as_bytes())
-        print(f"Email forwarded to {recipient_email}")
+
+        # Perform authentication only if credentials are provided
+        if "username" in smtp_config and "password" in smtp_config:
+            smtp.login(smtp_config['username'], smtp_config['password'])
+
+        smtp.sendmail(original_sender, recipient_email, raw_email.as_bytes())
+        print(f"Email from {original_sender} forwarded to {recipient_email}")
+
 
 
 def process_accounts(config):
