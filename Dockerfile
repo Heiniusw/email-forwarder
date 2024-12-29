@@ -1,10 +1,8 @@
-FROM python:3.13-slim
-
-RUN apt-get update && apt-get install -y cron
+FROM python
 
 WORKDIR /app
 
-RUN crontab crontab
+RUN crontab /app/crontab
 
 COPY . .
 
