@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  email-forwarder:
+    build:
+      context: .
+    container_name: email-forwarder
+    volumes:
+      - ./config.json:/app/config.json:ro
+    restart: always
