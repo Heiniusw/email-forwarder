@@ -63,6 +63,14 @@ def acquire_lock():
 def release_lock(lock):
     lock.release()
 
+# Helper method to safely convert email ID to string
+def get_email_id_str(email_id):
+    try:
+        return str(int(email_id.decode('utf-8')))
+    except (ValueError, TypeError) as e:
+        logging.error(f"Error converting email ID {email_id}: {e}")
+        return "invalid"
+
 # Fetch emails from IMAP
 def fetch_emails(imap_config):
     try:
@@ -90,7 +98,7 @@ def fetch_emails(imap_config):
 # Send the email via SMTP
 def send_email(smtp_config, msg, email_id):
     try:
-        email_id_str = int(email_id.decode('utf-8'))
+        email_id_str = get_email_id_str(email_id)
         logging.info(f"Forwarding email #{email_id_str} from {msg['From']} to {smtp_config['to_email']}")
         
         # Connect to SMTP server
@@ -103,17 +111,19 @@ def send_email(smtp_config, msg, email_id):
             logging.info(f"Email #{email_id_str} from {msg['From']} forwarded successfully.")
 
     except Exception as e:
-        logging.error(f"Error sending email #{email_id.decode('utf-8')}: {e}")
+        email_id_str = get_email_id_str(email_id)
+        logging.error(f"Error sending email #{email_id_str}: {e}")
 
 # Expunge the email from IMAP after forwarding
 def expunge_email(mail, email_id):
     try:
-        email_id_str = int(email_id.decode('utf-8'))
+        email_id_str = get_email_id_str(email_id)
         mail.store(email_id, '+FLAGS', '\\Deleted')
         mail.expunge()  # Permanently delete
         logging.info(f"Deleted email #{email_id_str}")
     except Exception as e:
-        logging.error(f"Error deleting email #{email_id.decode('utf-8')}: {e}")
+        email_id_str = get_email_id_str(email_id)
+        logging.error(f"Error deleting email #{email_id_str}: {e}")
 
 def process_accounts(config):
     for account in config['accounts']:
@@ -136,7 +146,8 @@ def process_accounts(config):
                 # Expunge the email only if forwarding was successful
                 expunge_email(mail, email_id)
             except Exception as e:
-                logging.error(f"Skipping deletion of email #{email_id.decode('utf-8')} due to error: {e}")
+                email_id_str = get_email_id_str(email_id)
+                logging.error(f"Skipping deletion of email #{email_id_str} due to error: {e}")
 
         # Close the IMAP connection
         mail.close()
