@@ -72,9 +72,10 @@ def fetch_emails(imap_config):
         return [], None
 
 # Send the email via SMTP
-def send_email(smtp_config, msg):
+def send_email(smtp_config, msg, email_id):
     try:
-        logging.info(f"Forwarding email from {msg['From']} to {msg['To']}")
+        email_id_str = int(email_id.decode('utf-8'))
+        logging.info(f"Forwarding email #{email_id_str} from {msg['From']} to {smtp_config['to_email']}")
         
         # Connect to SMTP server
         with smtplib.SMTP_SSL(smtp_config['host'], smtp_config['port']) as server:
@@ -82,26 +83,27 @@ def send_email(smtp_config, msg):
                 server.login(smtp_config['username'], smtp_config['password'])
             
             # Forward the email
-            server.sendmail(msg['From'], msg['To'], msg.as_string())
-            logging.info(f"Email from {msg['From']} forwarded successfully.")
+            server.sendmail(msg['From'], smtp_config['to_email'], msg.as_string())
+            logging.info(f"Email #{email_id_str} from {msg['From']} forwarded successfully.")
 
     except Exception as e:
-        logging.error(f"Error sending email: {e}")
+        logging.error(f"Error sending email #{email_id.decode('utf-8')}: {e}")
 
 # Expunge the email from IMAP after forwarding
 def expunge_email(mail, email_id):
     try:
-        # Mark the email for deletion using its ID
+        email_id_str = int(email_id.decode('utf-8'))
         mail.store(email_id, '+FLAGS', '\\Deleted')
         mail.expunge()  # Permanently delete
-        logging.info(f"Deleted email with ID {email_id}")
+        logging.info(f"Deleted email #{email_id_str}")
     except Exception as e:
-        logging.error(f"Error deleting email: {e}")
+        logging.error(f"Error deleting email #{email_id.decode('utf-8')}: {e}")
 
 def process_accounts(config):
     for account in config['accounts']:
         imap_config = config['imap_server']
         smtp_config = config['smtp_server']
+        smtp_config['to_email'] = account['forward_to']
         imap_config['email'] = account['email']
         imap_config['password'] = account['imap_password']
 
@@ -113,7 +115,7 @@ def process_accounts(config):
 
         # Process and forward emails
         for email_id, msg in emails:
-            send_email(smtp_config, msg)
+            send_email(smtp_config, msg, email_id)
 
             # Expunge the email after sending
             expunge_email(mail, email_id)
