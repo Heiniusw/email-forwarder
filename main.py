@@ -77,7 +77,7 @@ def validate_config(config):
 
 # Acquire file lock
 def acquire_lock():
-    lock = FileLock("ddns_updater.lock")
+    lock = FileLock("email-forwarder.lock")
     try:
         lock.acquire(timeout=1)
         return lock
@@ -98,7 +98,7 @@ def get_email_id_str(email_id):
         return "invalid"
 
 # Fetch emails from IMAP
-def fetch_emails(imap_config):
+def fetch_emails_from_imap_server(imap_config):
     try:
         logging.debug(f"Connecting to IMAP server: {imap_config['host']} as {imap_config['email']}")
         mail = imaplib.IMAP4_SSL(imap_config['host'], imap_config['port'])
@@ -134,7 +134,7 @@ def send_email(smtp_config, msg, email_id):
             
             # Forward the email
             server.sendmail(msg['From'], smtp_config['to_email'], msg.as_string())
-            logging.info(f"Email #{email_id_str} from {msg['From']} forwarded successfully.")
+            logging.info(f"Email #{email_id_str} forwarded successfully.")
 
     except Exception as e:
         email_id_str = get_email_id_str(email_id)
@@ -155,12 +155,11 @@ def process_accounts(config):
     for account in config['accounts']:
         imap_config = config['imap_server']
         smtp_config = config['smtp_server']
-        smtp_config['to_email'] = account['forward_to']
         imap_config['email'] = account['email']
         imap_config['password'] = account['imap_password']
 
         # Fetch emails from IMAP
-        emails, mail = fetch_emails(imap_config)
+        emails, mail = fetch_emails_from_imap_server(imap_config)
         if not emails:
             logging.debug("No emails found.")
             continue
@@ -173,7 +172,7 @@ def process_accounts(config):
                 expunge_email(mail, email_id)
             except Exception as e:
                 email_id_str = get_email_id_str(email_id)
-                logging.error(f"Skipping deletion of email #{email_id_str} due to error: {e}")
+                logging.error(f"Error handling email #{email_id_str} due to error: {e}")
 
         # Close the IMAP connection
         mail.close()
@@ -182,7 +181,7 @@ def process_accounts(config):
 def main():
     config_path = '/app/config.json'  # Path to your config file
     config = load_config(config_path)
-
+    
     # Validate the configuration
     validate_config(config)
 
