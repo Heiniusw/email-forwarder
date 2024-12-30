@@ -49,6 +49,32 @@ def load_config(path):
         logging.error(f"Error parsing config file: {e}")
         raise
 
+# Validate configuration
+def validate_config(config):
+    
+    # Validate IMAP config
+    for field in ['host', 'port']:
+        if field not in config.get('imap_server', {}):
+            logging.error(f"Missing IMAP configuration: {field}")
+            sys.exit(1)
+    
+    # Validate SMTP config
+    for field in ['host', 'port']:
+        if field not in config.get('smtp_server', {}):
+            logging.error(f"Missing SMTP configuration: {field}")
+            sys.exit(1)
+
+    # Validate accounts
+    if 'accounts' not in config:
+        logging.error("Missing 'accounts' section in config")
+        sys.exit(1)
+
+    for account in config['accounts']:
+        for field in ['email', 'imap_password']:
+            if field not in account:
+                logging.error(f"Missing required field {field} in account: {account}")
+                sys.exit(1)
+
 # Acquire file lock
 def acquire_lock():
     lock = FileLock("ddns_updater.lock")
@@ -156,6 +182,9 @@ def process_accounts(config):
 def main():
     config_path = '/app/config.json'  # Path to your config file
     config = load_config(config_path)
+
+    # Validate the configuration
+    validate_config(config)
 
     # Configure logging
     configure_logging(config)
