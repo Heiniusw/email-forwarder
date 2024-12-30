@@ -1,19 +1,56 @@
 import imaplib
 import smtplib
 from email import message_from_bytes
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import json
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Configure Logging
+def configure_logging(config):
+    log_file = config.get('log_file', '/var/log/email-forwarder.log')
+    logging_level = config.get('logging_level', 'INFO').upper()
+    log_rotation = config.get('log_rotation', False)
+
+    # Set logging level
+    level = getattr(logging, logging_level, logging.INFO)
+
+    # Configure logger
+    logger = logging.getLogger()
+    logger.setLevel(level)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s > %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
+
+    # Stream Handler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(level)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    # File Handler
+    if log_file:
+        if log_rotation:
+            file_handler = RotatingFileHandler(log_file, maxBytes=10485760, backupCount=5)
+        else:
+            file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
 # Load the configuration
 def load_config(path):
-    with open(path, 'r') as config_file:
-        return json.load(config_file)
+    try:
+        with open(path, 'r') as config_file:
+            return json.load(config_file)
+    except FileNotFoundError:
+        logging.error(f"Config file not found: {path}")
+        raise
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing config file: {e}")
+        raise
 
 # Fetch emails from IMAP
 def fetch_emails(imap_config):
     try:
-        print(f"Connecting to IMAP server: {imap_config['host']}")
+        logging.debug(f"Connecting to IMAP server: {imap_config['host']}")
         mail = imaplib.IMAP4_SSL(imap_config['host'], imap_config['port'])
         mail.login(imap_config['email'], imap_config['password'])
         mail.select("inbox")  # Connect to inbox
@@ -27,17 +64,17 @@ def fetch_emails(imap_config):
             raw_email = data[0][1]
             msg = message_from_bytes(raw_email)
             emails.append((num, msg))  # Store both email ID and message
-        
+
         return emails, mail
 
     except Exception as e:
-        print(f"Error fetching emails: {e}")
+        logging.error(f"Error fetching emails: {e}")
         return [], None
 
 # Send the email via SMTP
 def send_email(smtp_config, msg):
     try:
-        print(f"Forwarding email from {msg['From']} to {msg['To']}")
+        logging.info(f"Forwarding email from {msg['From']} to {msg['To']}")
         
         # Connect to SMTP server
         with smtplib.SMTP_SSL(smtp_config['host'], smtp_config['port']) as server:
@@ -46,10 +83,10 @@ def send_email(smtp_config, msg):
             
             # Forward the email
             server.sendmail(msg['From'], msg['To'], msg.as_string())
-            print(f"Email from {msg['From']} forwarded successfully.")
+            logging.info(f"Email from {msg['From']} forwarded successfully.")
 
     except Exception as e:
-        print(f"Error sending email: {e}")
+        logging.error(f"Error sending email: {e}")
 
 # Expunge the email from IMAP after forwarding
 def expunge_email(mail, email_id):
@@ -57,9 +94,9 @@ def expunge_email(mail, email_id):
         # Mark the email for deletion using its ID
         mail.store(email_id, '+FLAGS', '\\Deleted')
         mail.expunge()  # Permanently delete
-        print(f"Deleted email with ID {email_id}")
+        logging.info(f"Deleted email with ID {email_id}")
     except Exception as e:
-        print(f"Error deleting email: {e}")
+        logging.error(f"Error deleting email: {e}")
 
 def process_accounts(config):
     for account in config['accounts']:
@@ -71,7 +108,7 @@ def process_accounts(config):
         # Fetch emails from IMAP
         emails, mail = fetch_emails(imap_config)
         if not emails:
-            print("No emails found.")
+            logging.info("No emails found.")
             continue
 
         # Process and forward emails
@@ -88,10 +125,13 @@ def process_accounts(config):
 def main():
     config_path = '/app/config.json'  # Path to your config file
     config = load_config(config_path)
-    
-    print("Starting email-forwarder...")
+
+    # Configure logging
+    configure_logging(config)
+
+    logging.info("Starting email-forwarder...")
     process_accounts(config)
-    print("Exiting email-forwarder...")
+    logging.info("Exiting email-forwarder...")
 
 if __name__ == '__main__':
     main()
