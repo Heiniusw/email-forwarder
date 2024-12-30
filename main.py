@@ -1,9 +1,11 @@
+import sys
 import imaplib
 import smtplib
 from email import message_from_bytes
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+from filelock import FileLock
 
 # Configure Logging
 def configure_logging(config):
@@ -46,6 +48,20 @@ def load_config(path):
     except json.JSONDecodeError as e:
         logging.error(f"Error parsing config file: {e}")
         raise
+
+# Acquire file lock
+def acquire_lock():
+    lock = FileLock("ddns_updater.lock")
+    try:
+        lock.acquire(timeout=1)
+        return lock
+    except Exception as e:
+        logging.error(f"Failed to acquire lock: {e}")
+        sys.exit(1)
+
+# Release file lock
+def release_lock(lock):
+    lock.release()
 
 # Fetch emails from IMAP
 def fetch_emails(imap_config):
@@ -115,10 +131,12 @@ def process_accounts(config):
 
         # Process and forward emails
         for email_id, msg in emails:
-            send_email(smtp_config, msg, email_id)
-
-            # Expunge the email after sending
-            expunge_email(mail, email_id)
+            try:
+                send_email(smtp_config, msg, email_id)
+                # Expunge the email only if forwarding was successful
+                expunge_email(mail, email_id)
+            except Exception as e:
+                logging.error(f"Skipping deletion of email #{email_id.decode('utf-8')} due to error: {e}")
 
         # Close the IMAP connection
         mail.close()
@@ -131,9 +149,15 @@ def main():
     # Configure logging
     configure_logging(config)
 
-    logging.debug("Starting email-forwarder...")
-    process_accounts(config)
-    logging.debug("Exiting email-forwarder...")
+    # Acquire Lock
+    lock_file = acquire_lock()
+
+    try:
+        logging.debug("Starting email-forwarder...")
+        process_accounts(config)
+        logging.debug("Exiting email-forwarder...")
+    finally:
+        release_lock(lock_file)  # Ensure the lock is always released
 
 if __name__ == '__main__':
     main()
