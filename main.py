@@ -70,7 +70,7 @@ def validate_config(config):
         sys.exit(1)
 
     for account in config['accounts']:
-        for field in ['email', 'imap_password']:
+        for field in ['source_username', 'source_password', 'destination_email']:
             if field not in account:
                 logging.error(f"Missing required field {field} in account: {account}")
                 sys.exit(1)
@@ -122,10 +122,10 @@ def fetch_emails_from_imap_server(imap_config):
         return [], None
 
 # Send the email via SMTP
-def send_email(smtp_config, msg, email_id):
+def send_email(smtp_config, msg, email_id, destination_email):
     try:
         email_id_str = get_email_id_str(email_id)
-        logging.info(f"Forwarding email #{email_id_str} from {msg['From']} to {smtp_config['to_email']}")
+        logging.info(f"Forwarding email #{email_id_str} from {msg['From']} to {destination_email}")
         
         # Connect to SMTP server
         with smtplib.SMTP_SSL(smtp_config['host'], smtp_config['port']) as server:
@@ -133,7 +133,7 @@ def send_email(smtp_config, msg, email_id):
                 server.login(smtp_config['username'], smtp_config['password'])
             
             # Forward the email
-            server.sendmail(msg['From'], smtp_config['to_email'], msg.as_string())
+            server.sendmail(msg['From'], destination_email, msg.as_string())
             logging.info(f"Email #{email_id_str} forwarded successfully.")
 
     except Exception as e:
@@ -155,8 +155,8 @@ def process_accounts(config):
     for account in config['accounts']:
         imap_config = config['imap_server']
         smtp_config = config['smtp_server']
-        imap_config['email'] = account['email']
-        imap_config['password'] = account['imap_password']
+        imap_config['email'] = account['source_username']
+        imap_config['password'] = account['source_password']
 
         # Fetch emails from IMAP
         emails, mail = fetch_emails_from_imap_server(imap_config)
@@ -167,7 +167,7 @@ def process_accounts(config):
         # Process and forward emails
         for email_id, msg in emails:
             try:
-                send_email(smtp_config, msg, email_id)
+                send_email(smtp_config, msg, email_id, account['destination_email'])
                 # Expunge the email only if forwarding was successful
                 expunge_email(mail, email_id)
             except Exception as e:
