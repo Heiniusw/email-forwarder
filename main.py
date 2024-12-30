@@ -50,7 +50,7 @@ def load_config(path):
 # Fetch emails from IMAP
 def fetch_emails(imap_config):
     try:
-        logging.debug(f"Connecting to IMAP server: {imap_config['host']}")
+        logging.debug(f"Connecting to IMAP server: {imap_config['host']} as {imap_config['email']}")
         mail = imaplib.IMAP4_SSL(imap_config['host'], imap_config['port'])
         mail.login(imap_config['email'], imap_config['password'])
         mail.select("inbox")  # Connect to inbox
@@ -108,7 +108,7 @@ def process_accounts(config):
         # Fetch emails from IMAP
         emails, mail = fetch_emails(imap_config)
         if not emails:
-            logging.info("No emails found.")
+            logging.debug("No emails found.")
             continue
 
         # Process and forward emails
@@ -129,9 +129,9 @@ def main():
     # Configure logging
     configure_logging(config)
 
-    logging.info("Starting email-forwarder...")
+    logging.debug("Starting email-forwarder...")
     process_accounts(config)
-    logging.info("Exiting email-forwarder...")
+    logging.debug("Exiting email-forwarder...")
 
 if __name__ == '__main__':
     main()

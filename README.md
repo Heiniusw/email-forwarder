@@ -1,29 +1,30 @@
 ## Config Example
 ```json
-[
-  {
+{
+    "log_file": "/var/log/email-forwarder.log",
+    "logging_level": "DEBUG",
+    "log_rotation": true,
     "imap_server": {
-      "host": "imap.test.de",
-      "port": 993
+        "host": "imap.example.com",
+        "port": 993
     },
     "smtp_server": {
-      "host": "smtp.localmail.com",
-      "port": 587,
-      "username": "smtp_user",
-      "password": "smtp_password"
+        "host": "smtp.example.com",
+        "port": 465,
+        "username": "your-smtp-username",
+        "password": "your-smtp-password"
     },
     "accounts": [
-      {
-        "email": "user1@test.de",
-        "imap_password": "imap_password1"
-      },
-      {
-        "email": "user2@test.de",
-        "imap_password": "imap_password2"
-      }
+        {
+            "email": "user1@example.com",
+            "imap_password": "password1"
+        },
+        {
+            "email": "user2@example.com",
+            "imap_password": "password2"
+        }
     ]
-  }
-]
+}
 ```
 
 imap_server: Where emails are fetched from.
