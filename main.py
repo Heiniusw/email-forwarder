@@ -158,21 +158,26 @@ def process_accounts(config):
         imap_config['email'] = account['source_username']
         imap_config['password'] = account['source_password']
 
-        # Fetch emails from IMAP
+        # Connect to IMAP server
         emails, mail = fetch_emails_from_imap_server(imap_config)
         if not emails:
             logging.debug("No emails found.")
             continue
 
         # Process and forward emails
-        for email_id, msg in emails:
-            try:
-                send_email(smtp_config, msg, email_id, account['destination_email'])
-                # Expunge the email only if forwarding was successful
-                expunge_email(mail, email_id)
-            except Exception as e:
-                email_id_str = get_email_id_str(email_id)
-                logging.error(f"Error handling email #{email_id_str} due to error: {e}")
+        while emails:  # Continue processing until no emails are left
+            for email_id, msg in emails:
+                try:
+                    send_email(smtp_config, msg, email_id)
+                    expunge_email(mail, email_id)
+
+                    # Refetch emails after deletion to handle renumbering
+                    emails, _ = fetch_emails_from_imap_server(imap_config)
+                    break  # Break to refetch email IDs after expunge
+                except Exception as e:
+                    email_id_str = get_email_id_str(email_id)
+                    logging.error(f"Error handling email #{email_id_str}: {e}")
+                    continue
 
         # Close the IMAP connection
         mail.close()
