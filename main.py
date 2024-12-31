@@ -144,12 +144,12 @@ def send_email(smtp_config, msg, email_id, destination_email):
 def expunge_email(mail, email_id):
     try:
         email_id_str = get_email_id_str(email_id)
+        # Mark the email for deletion
         mail.store(email_id, '+FLAGS', '\\Deleted')
-        mail.expunge()  # Permanently delete
-        logging.info(f"Deleted email #{email_id_str}")
+        logging.info(f"Marked email #{email_id_str} for deletion.")
     except Exception as e:
         email_id_str = get_email_id_str(email_id)
-        logging.error(f"Error deleting email #{email_id_str}: {e}")
+        logging.error(f"Error marking email #{email_id_str} for deletion: {e}")
 
 def process_accounts(config):
     for account in config['accounts']:
@@ -158,30 +158,33 @@ def process_accounts(config):
         imap_config['email'] = account['source_username']
         imap_config['password'] = account['source_password']
 
-        # Connect to IMAP server
+        # Fetch emails from IMAP
         emails, mail = fetch_emails_from_imap_server(imap_config)
         if not emails:
             logging.debug("No emails found.")
             continue
 
         # Process and forward emails
-        while emails:  # Continue processing until no emails are left
-            for email_id, msg in emails:
-                try:
-                    send_email(smtp_config, msg, email_id)
-                    expunge_email(mail, email_id)
+        for email_id, msg in emails:
+            try:
+                send_email(smtp_config, msg, email_id, account['destination_email'])
+                # Mark the email for deletion after successful forwarding
+                expunge_email(mail, email_id)
+            except Exception as e:
+                email_id_str = get_email_id_str(email_id)
+                logging.error(f"Error handling email #{email_id_str} due to error: {e}")
 
-                    # Refetch emails after deletion to handle renumbering
-                    emails, _ = fetch_emails_from_imap_server(imap_config)
-                    break  # Break to refetch email IDs after expunge
-                except Exception as e:
-                    email_id_str = get_email_id_str(email_id)
-                    logging.error(f"Error handling email #{email_id_str}: {e}")
-                    continue
+        # Expunge (permanently delete) all emails marked for deletion
+        try:
+            mail.expunge()
+            logging.info("All marked emails deleted successfully.")
+        except Exception as e:
+            logging.error(f"Error during expunge operation: {e}")
 
         # Close the IMAP connection
         mail.close()
         mail.logout()
+
 
 def main():
     config_path = '/app/config.json'  # Path to your config file
