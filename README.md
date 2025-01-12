@@ -1,3 +1,6 @@
+## Overview
+<img src="https://m.it-thaler.de/images/projekte/email-forwarder/email-forwarder-diagramm.png" width="500px"/>
+
 ## Config Example
 ```json
 {
